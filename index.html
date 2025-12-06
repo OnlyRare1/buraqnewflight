@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Buraq Travel - Search</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .glass {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+        }
+        .flight-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3b82f6;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+        }
+        /* Custom scrollbar for suggestions */
+        .suggestions-list::-webkit-scrollbar { width: 8px; }
+        .suggestions-list::-webkit-scrollbar-track { background: #f1f1f1; }
+        .suggestions-list::-webkit-scrollbar-thumb { background: #888; border-radius: 4px; }
+        .suggestions-list::-webkit-scrollbar-thumb:hover { background: #555; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        .tab-active {
+            background-color: #16a34a; /* green-600 */
+            color: white;
+            font-weight: bold;
+        }
+        .tab-inactive {
+            background-color: #f3f4f6; /* gray-100 */
+            color: #4b5563; /* gray-600 */
+        }
+        .pulse-dot {
+            width: 8px;
+            height: 8px;
+            background-color: #4ade80;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 6px;
+            animation: pulse-animation 2s infinite;
+        }
+        @keyframes pulse-animation {
+            0% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.7); }
+            70% { box-shadow: 0 0 0 6px rgba(74, 222, 128, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0); }
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-green-600 to-teal-800 min-h-screen font-sans text-gray-800">
+
+    <nav class="bg-white shadow-lg sticky top-0 z-50">
+        <div class="max-w-6xl mx-auto px-4">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center">
+                    <a href="#" class="flex items-center">
+                        <i class="fas fa-plane-departure text-green-600 text-2xl mr-2"></i>
+                        <span class="font-bold text-gray-600 text-xl tracking-tight">Buraq Travel</span>
+                    </a>
+                </div>
+                <div class="flex items-center space-x-3">
+                    <div class="flex items-center bg-gray-800 text-white text-xs rounded-full px-3 py-1 border border-gray-600 shadow-sm">
+                        <span class="pulse-dot"></span>
+                        <span class="font-semibold tracking-wide">Production Active</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mx-auto px-4 py-8">
+        
+        <div class="max-w-4xl mx-auto bg-white rounded-xl shadow-2xl overflow-visible p-6 mb-8 relative z-40">
+            <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+                <h2 class="text-2xl font-bold text-gray-700">Find your next flight</h2>
+                <div class="text-sm bg-red-100 text-red-800 px-3 py-1 rounded-full border border-red-200 font-bold animate-pulse shadow-sm">
+                    <i class="fas fa-fire mr-1"></i> FLAT 40% OFF EVERYTHING
+                </div>
+            </div>
+
+            <div class="flex space-x-2 mb-6 bg-gray-100 p-1 rounded-lg w-fit">
+                <button type="button" onclick="setTripType('oneway')" id="tab-oneway" class="tab-active px-4 py-2 rounded-md transition text-sm">One Way</button>
+                <button type="button" onclick="setTripType('roundtrip')" id="tab-roundtrip" class="tab-inactive px-4 py-2 rounded-md transition text-sm">Round Trip</button>
+                <button type="button" onclick="setTripType('multicity')" id="tab-multicity" class="tab-inactive px-4 py-2 rounded-md transition text-sm">Multi-City</button>
+            </div>
+            
+            <form id="searchForm" class="space-y-4" autocomplete="off">
+                
+                <div id="standard-fields" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="relative group">
+                        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">From</label>
+                        <div class="relative">
+                            <i class="fas fa-plane-departure absolute left-3 top-3 text-gray-400"></i>
+                            <input type="text" id="origin-input" placeholder="City or Airport" 
+                                   class="pl-10 pr-8 w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 uppercase font-semibold text-gray-700 transition-shadow">
+                            <input type="hidden" id="origin" value="">
+                            <button type="button" onclick="clearInput('origin-input', 'origin')" class="absolute right-2 top-2.5 text-gray-300 hover:text-gray-500">
+                                <i class="fas fa-times-circle"></i>
+                            </button>
+                            <div id="origin-loading" class="absolute right-8 top-3 hidden"><i class="fas fa-spinner fa-spin text-green-600"></i></div>
+                        </div>
+                        <ul id="origin-suggestions" class="suggestions-list absolute w-full bg-white border border-gray-200 rounded-b-lg shadow-xl max-h-60 overflow-y-auto hidden z-50 mt-1"></ul>
+                    </div>
+
+                    <div class="relative group">
+                        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">To</label>
+                        <div class="relative">
+                            <i class="fas fa-plane-arrival absolute left-3 top-3 text-gray-400"></i>
+                            <input type="text" id="destination-input" placeholder="City or Airport" 
+                                   class="pl-10 pr-8 w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 uppercase font-semibold text-gray-700 transition-shadow">
+                            <input type="hidden" id="destination" value="">
+                             <button type="button" onclick="clearInput('destination-input', 'destination')" class="absolute right-2 top-2.5 text-gray-300 hover:text-gray-500">
+                                <i class="fas fa-times-circle"></i>
+                            </button>
+                            <div id="destination-loading" class="absolute right-8 top-3 hidden"><i class="fas fa-spinner fa-spin text-green-600"></i></div>
+                        </div>
+                        <ul id="destination-suggestions" class="suggestions-list absolute w-full bg-white border border-gray-200 rounded-b-lg shadow-xl max-h-60 overflow-y-auto hidden z-50 mt-1"></ul>
+                    </div>
+
+                    <div class="relative">
+                        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Departure</label>
+                        <div class="relative">
+                            <i class="far fa-calendar-alt absolute left-3 top-3 text-gray-400"></i>
+                            <input type="date" id="date" class="pl-10 w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 font-medium text-gray-700" required>
+                        </div>
+                    </div>
+
+                    <div class="relative hidden" id="return-date-container">
+                        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Return</label>
+                        <div class="relative">
+                            <i class="far fa-calendar-check absolute left-3 top-3 text-gray-400"></i>
+                            <input type="date" id="return-date" class="pl-10 w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 font-medium text-gray-700">
+                        </div>
+                    </div>
+                </div>
+
+                <div id="multicity-container" class="hidden space-y-4">
+                    <div id="segments-wrapper" class="space-y-3">
+                        </div>
+                    <button type="button" onclick="addSegment()" class="text-sm text-green-600 font-bold hover:text-green-800 flex items-center bg-green-50 px-3 py-2 rounded-lg border border-green-100 transition-colors">
+                        <i class="fas fa-plus-circle mr-1"></i> Add Another Flight
+                    </button>
+                </div>
+
+                <div class="flex flex-col md:flex-row items-center justify-between pt-6 border-t border-gray-100 mt-6 gap-4">
+                    <div class="flex items-center bg-gray-50 px-3 py-2 rounded-lg border border-gray-200">
+                        <input id="useProxy" type="checkbox" class="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded cursor-pointer" checked>
+                        <label for="useProxy" class="ml-2 block text-sm text-gray-600 cursor-pointer select-none">
+                            Use Proxy (Required for Web App)
+                        </label>
+                    </div>
+                    <button type="submit" class="w-full md:w-auto bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-10 rounded-lg shadow-lg hover:shadow-xl transition duration-300 flex items-center justify-center transform hover:-translate-y-0.5">
+                        <i class="fas fa-search mr-2"></i>
+                        <span id="btnText">Search Flights</span>
+                        <div id="btnLoader" class="loader ml-2 hidden" style="width: 20px; height: 20px; border-width: 2px;"></div>
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <div id="errorContainer" class="max-w-4xl mx-auto hidden mb-6 relative z-0">
+            <div class="bg-red-50 border-l-4 border-red-500 text-red-700 p-4 rounded shadow-sm flex items-start" role="alert">
+                <i class="fas fa-exclamation-circle mt-1 mr-3 text-red-500"></i>
+                <div>
+                    <p class="font-bold">Search Failed</p>
+                    <div id="errorText" class="text-sm mt-1">Something went wrong.</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="resultsArea" class="max-w-4xl mx-auto space-y-4 relative z-0 pb-12">
+            </div>
+
+    </div>
+
+    <script>
+        // --- PRODUCTION CONFIGURATION ---
+        const API_KEY = "JXEgEvgYfpnaGDPAqbCHA71tTrUgSsu3";
+        const API_SECRET = "WliWhvsqY9JVXvQX";
+        
+        const BASE_URL = "https://api.amadeus.com";
+        const AUTH_URL = `${BASE_URL}/v1/security/oauth2/token`;
+        const SEARCH_URL_GET = `${BASE_URL}/v2/shopping/flight-offers`;
+        const SEARCH_URL_POST = `${BASE_URL}/v2/shopping/flight-offers`; 
+        const LOCATION_URL = `${BASE_URL}/v1/reference-data/locations`;
+        
+        // CORSPROXY.IO - Working well
+        const PROXY_URL = "https://corsproxy.io/?"; 
+
+        let currentFlights = []; 
+        let cachedToken = null;
+        let tokenExpiry = 0;
+        let currentTripType = 'oneway';
+        const ACTIVE_DISCOUNT_PERCENTAGE = 0.40; 
+
+        // Set default dates
+        const today = new Date();
+        const tomorrow = new Date(today);
+        tomorrow.setDate(today.getDate() + 1);
+        const dayAfter = new Date(today);
+        dayAfter.setDate(today.getDate() + 7);
+
+        document.getElementById('date').valueAsDate = tomorrow;
+        document.getElementById('return-date').valueAsDate = dayAfter;
+
+        function clearInput(inputId, hiddenId) {
+            document.getElementById(inputId).value = '';
+            document.getElementById(hiddenId).value = '';
+            document.getElementById(inputId).focus();
+        }
+
+        // --- TRIP TYPE LOGIC ---
+        function setTripType(type) {
+            currentTripType = type;
+            
+            // Update Tab Styles
+            ['oneway', 'roundtrip', 'multicity'].forEach(t => {
+                const btn = document.getElementById(`tab-${t}`);
+                if (t === type) {
+                    btn.className = "tab-active px-4 py-2 rounded-md transition text-sm shadow-sm";
+                } else {
+                    btn.className = "tab-inactive px-4 py-2 rounded-md transition text-sm hover:bg-gray-200";
+                }
+            });
+
+            // Toggle Fields
+            const standardFields = document.getElementById('standard-fields');
+            const returnDateContainer = document.getElementById('return-date-container');
+            const multiCityContainer = document.getElementById('multicity-container');
+
+            if (type === 'oneway') {
+                standardFields.classList.remove('hidden');
+                returnDateContainer.classList.add('hidden');
+                multiCityContainer.classList.add('hidden');
+                document.getElementById('return-date').required = false;
+            } else if (type === 'roundtrip') {
+                standardFields.classList.remove('hidden');
+                returnDateContainer.classList.remove('hidden');
+                multiCityContainer.classList.add('hidden');
+                document.getElementById('return-date').required = true;
+            } else if (type === 'multicity') {
+                standardFields.classList.add('hidden');
+                multiCityContainer.classList.remove('hidden');
+                document.getElementById('return-date').required = false;
+                
+                // Initialize segments if empty
+                const wrapper = document.getElementById('segments-wrapper');
+                if(wrapper.children.length === 0) {
+                    addSegment();
+                    addSegment();
+                }
+            }
+        }
+
+        // --- AUTOCOMPLETE LOGIC ---
+        function setupAutocomplete(inputElement, listId, loadingId, hiddenInputId) {
+            let debounceTimer;
+            const listElement = document.getElementById(listId);
+            const loadingElement = document.getElementById(loadingId);
+            const hiddenInput = document.getElementById(hiddenInputId);
+
+            inputElement.addEventListener('input', (e) => {
+                const keyword = e.target.value;
+                if(!keyword && hiddenInput) hiddenInput.value = "";
+
+                clearTimeout(debounceTimer);
+                if (keyword.length < 2) {
+                    listElement.classList.add('hidden');
+                    return;
+                }
+
+                debounceTimer = setTimeout(async () => {
+                    if(loadingElement) loadingElement.classList.remove('hidden');
+                    try {
+                        const locations = await searchLocations(keyword);
+                        renderSuggestions(locations, listElement, inputElement, hiddenInput);
+                    } catch (error) {
+                         console.error("Location search error", error);
+                    } finally {
+                        if(loadingElement) loadingElement.classList.add('hidden');
+                    }
+                }, 400);
+            });
+
+            document.addEventListener('click', (e) => {
+                if (!inputElement.contains(e.target) && !listElement.contains(e.target)) {
+                    listElement.classList.add('hidden');
+                }
+            });
+        }
+
+        async function searchLocations(keyword) {
+            const useProxy = document.getElementById('useProxy').checked;
+            const token = await getAccessToken(useProxy);
+            const urlObj = new URL(LOCATION_URL);
+            urlObj.searchParams.append('subType', 'AIRPORT,CITY');
+            urlObj.searchParams.append('keyword', keyword);
+            urlObj.searchParams.append('view', 'LIGHT');
+            
+            const endpoint = useProxy ? PROXY_URL + encodeURIComponent(urlObj.toString()) : urlObj.toString();
+            const data = await fetchAndParse(endpoint, { method: 'GET', headers: { 'Authorization': `Bearer ${token}` } });
+            return data.data || [];
+        }
+
+        function renderSuggestions(locations, listElement, inputElement, hiddenInput) {
+            listElement.innerHTML = '';
+            if (locations.length === 0) { listElement.classList.add('hidden'); return; }
+            locations.forEach(loc => {
+                const li = document.createElement('li');
+                li.className = "px-4 py-3 hover:bg-green-50 cursor-pointer border-b border-gray-100 last:border-b-0 flex justify-between items-center transition-colors group";
+                const icon = loc.subType === 'AIRPORT' ? '<i class="fas fa-plane text-gray-400 group-hover:text-green-600 mr-2 transition-colors"></i>' : '<i class="fas fa-city text-gray-400 group-hover:text-green-600 mr-2 transition-colors"></i>';
+                li.innerHTML = `
+                    <div class="flex flex-col">
+                        <span class="font-bold text-gray-700 text-sm">${icon}${loc.name}</span>
+                        <span class="text-xs text-gray-500 ml-6">${loc.address.cityName}, ${loc.address.countryName}</span>
+                    </div>
+                    <span class="bg-gray-100 group-hover:bg-green-100 text-gray-600 group-hover:text-green-700 text-xs font-bold px-2 py-1 rounded transition-colors">${loc.iataCode}</span>
+                `;
+                li.addEventListener('click', () => {
+                    inputElement.value = `${loc.name} (${loc.iataCode})`;
+                    if(hiddenInput) hiddenInput.value = loc.iataCode;
+                    listElement.classList.add('hidden');
+                });
+                listElement.appendChild(li);
+            });
+            listElement.classList.remove('hidden');
+        }
+
+        // Initialize Standard Autocomplete
+        setupAutocomplete(document.getElementById('origin-input'), 'origin-suggestions', 'origin-loading', 'origin');
+        setupAutocomplete(document.getElementById('destination-input'), 'destination-suggestions', 'destination-loading', 'destination');
+
+
+        // --- MULTI-CITY SEGMENT LOGIC ---
+        let segmentCount = 0;
+        function addSegment() {
+            segmentCount++;
+            const wrapper = document.getElementById('segments-wrapper');
+            const div = document.createElement('div');
+            div.className = "grid grid-cols-1 md:grid-cols-3 gap-2 bg-gray-50 p-4 rounded-lg border border-gray-200 relative animate-fade-in";
+            div.innerHTML = `
+                <div class="relative group">
+                    <label class="text-xs font-bold text-gray-500 uppercase">From</label>
+                    <input type="text" id="seg-origin-input-${segmentCount}" placeholder="City" class="w-full p-2 border border-gray-300 rounded uppercase text-sm font-semibold">
+                    <input type="hidden" id="seg-origin-${segmentCount}">
+                    <ul id="seg-origin-suggestions-${segmentCount}" class="suggestions-list absolute w-full bg-white border border-gray-200 rounded-b-lg shadow-xl max-h-40 overflow-y-auto hidden z-50 mt-1"></ul>
+                </div>
+                <div class="relative group">
+                    <label class="text-xs font-bold text-gray-500 uppercase">To</label>
+                    <input type="text" id="seg-dest-input-${segmentCount}" placeholder="City" class="w-full p-2 border border-gray-300 rounded uppercase text-sm font-semibold">
+                    <input type="hidden" id="seg-dest-${segmentCount}">
+                    <ul id="seg-dest-suggestions-${segmentCount}" class="suggestions-list absolute w-full bg-white border border-gray-200 rounded-b-lg shadow-xl max-h-40 overflow-y-auto hidden z-50 mt-1"></ul>
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-gray-500 uppercase">Date</label>
+                    <input type="date" id="seg-date-${segmentCount}" class="w-full p-2 border border-gray-300 rounded text-sm">
+                </div>
+            `;
+            wrapper.appendChild(div);
+
+            setupAutocomplete(document.getElementById(`seg-origin-input-${segmentCount}`), `seg-origin-suggestions-${segmentCount}`, null, `seg-origin-${segmentCount}`);
+            setupAutocomplete(document.getElementById(`seg-dest-input-${segmentCount}`), `seg-dest-suggestions-${segmentCount}`, null, `seg-dest-${segmentCount}`);
+        }
+
+        // --- API TOKEN ---
+        async function getAccessToken(useProxy) {
+            const now = Date.now() / 1000;
+            if (cachedToken && tokenExpiry > now) return cachedToken;
+            
+            const endpoint = useProxy ? PROXY_URL + encodeURIComponent(AUTH_URL) : AUTH_URL;
+            const params = new URLSearchParams();
+            params.append('grant_type', 'client_credentials');
+            params.append('client_id', API_KEY);
+            params.append('client_secret', API_SECRET);
+            try {
+                const data = await fetchAndParse(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: params });
+                cachedToken = data.access_token;
+                tokenExpiry = (Date.now() / 1000) + data.expires_in - 60;
+                return data.access_token;
+            } catch (err) { throw err; }
+        }
+
+        async function fetchAndParse(url, options) {
+            if (!options.headers) options.headers = {};
+            const response = await fetch(url, options);
+            const text = await response.text();
+            
+            try {
+                const data = JSON.parse(text);
+                if (!response.ok) {
+                    if (response.status === 401) throw new Error("Unauthorized: API Keys might not be active yet.");
+                    if (response.status === 429) throw new Error("Too Many Requests: Please wait a moment.");
+                    const detail = data.error_description || (data.errors && data.errors[0] ? (data.errors[0].detail || data.errors[0].title) : response.statusText);
+                    throw new Error(detail);
+                }
+                return data;
+            } catch (e) {
+                if (!response.ok) {
+                    if (response.status === 401) throw new Error("Unauthorized: API Keys might not be active yet.");
+                    if (response.status === 403) throw new Error("Forbidden: The connection was blocked. Please try again.");
+                    throw new Error(e.message || response.statusText);
+                }
+                throw e;
+            }
+        }
+
+        // --- MAIN SEARCH EXECUTION ---
+        document.getElementById('searchForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            clearUI();
+            showLoading(true);
+            const useProxy = document.getElementById('useProxy').checked;
+
+            try {
+                const token = await getAccessToken(useProxy);
+                if (!token) throw new Error("Failed to retrieve access token.");
+                
+                let flights;
+                if (currentTripType === 'multicity') {
+                    flights = await searchMultiCity(token, useProxy);
+                } else {
+                    flights = await searchStandard(token, useProxy);
+                }
+                
+                displayResults(flights);
+
+            } catch (error) {
+                showError(error.message);
+                console.error(error);
+            } finally {
+                showLoading(false);
+            }
+        });
+
+        // 1. Standard Search (One Way / Round Trip)
+        async function searchStandard(token, useProxy) {
+            let origin = document.getElementById('origin').value;
+            let destination = document.getElementById('destination').value;
+            
+            // Fallback for manual typing
+            if (!origin) origin = document.getElementById('origin-input').value.toUpperCase().substring(0,3);
+            if (!destination) destination = document.getElementById('destination-input').value.toUpperCase().substring(0,3);
+            
+            const date = document.getElementById('date').value;
+            const returnDate = document.getElementById('return-date').value;
+
+            if(!origin || !destination) throw new Error("Please select valid cities.");
+
+            const urlObj = new URL(SEARCH_URL_GET);
+            urlObj.searchParams.append('originLocationCode', origin);
+            urlObj.searchParams.append('destinationLocationCode', destination);
+            urlObj.searchParams.append('departureDate', date);
+            
+            if (currentTripType === 'roundtrip') {
+                if(!returnDate) throw new Error("Return date is required for Round Trip.");
+                urlObj.searchParams.append('returnDate', returnDate);
+            }
+            
+            urlObj.searchParams.append('adults', '1');
+            urlObj.searchParams.append('max', '10');
+            urlObj.searchParams.append('currencyCode', 'PKR');
+
+            // --- AMADEUS API CALL ---
+            const endpoint = useProxy ? PROXY_URL + encodeURIComponent(urlObj.toString()) : urlObj.toString();
+            const data = await fetchAndParse(endpoint, { method: 'GET', headers: { 'Authorization': `Bearer ${token}` } });
+            
+            // --- INTEGRATION: Call Local Python Server (Airblue/Fly Jinnah) ---
+            try {
+                console.log(`Calling Local Server for ${origin} -> ${destination}...`);
+                
+                // Fetch from Flask (ensure server.py is running on port 5000)
+                const localResponse = await fetch(`https://flight-scraper-api.onrender.com/search_flights?origin=${origin}...`);
+                const localData = await localResponse.json();
+
+                if (localData && localData.length > 0) {
+                    console.log("Local Scraper Data Received:", localData);
+
+                    // Map local data (Airblue) to Amadeus API structure so UI can read it
+                    const mappedLocalFlights = localData.map(flight => {
+                        return {
+                            id: "local_" + Math.random().toString(36).substr(2, 9),
+                            source: "SCRAPER", 
+                            price: {
+                                currency: flight.currency || "PKR",
+                                // If price is "Check Site", we set it to 0 for calculation safety
+                                total: flight.price !== "Check Site" ? flight.price.replace(/[^0-9.]/g, '') : "0", 
+                                grandTotal: flight.price !== "Check Site" ? flight.price.replace(/[^0-9.]/g, '') : "0"
+                            },
+                            itineraries: [{
+                                duration: "PT2H", // Placeholder duration
+                                segments: [{
+                                    carrierCode: flight.airline === "Airblue" ? "PA" : "9P",
+                                    number: flight.flight_no.replace("PA-", "").replace("9P-", ""),
+                                    departure: { 
+                                        iataCode: flight.origin, 
+                                        at: `2025-12-06T${flight.time}:00` 
+                                    },
+                                    arrival: { 
+                                        iataCode: flight.destination !== "N/A" ? flight.destination : destination, 
+                                        at: `2025-12-06T${parseInt(flight.time)+2}:00` // Dummy arrival
+                                    }
+                                }]
+                            }]
+                        };
+                    });
+
+                    // Merge with API data
+                    if (!data.data) { data.data = []; }
+                    data.data = [...mappedLocalFlights, ...data.data];
+                }
+            } catch (err) {
+                console.warn("Local Python server not reachable or error parsing:", err);
+                // We do NOT throw here, so Amadeus results still show even if local fails
+            }
+            // ------------------------------------------------------------------
+
+            return data.data;
+        }
+
+        // 2. Multi-City Search
+        async function searchMultiCity(token, useProxy) {
+            const originDestinations = [];
+            const wrapper = document.getElementById('segments-wrapper');
+            const rows = wrapper.children;
+
+            for (let i = 0; i < rows.length; i++) {
+                const idx = i + 1;
+                let origin = document.getElementById(`seg-origin-${idx}`).value;
+                let dest = document.getElementById(`seg-dest-${idx}`).value;
+                
+                if(!origin) origin = document.getElementById(`seg-origin-input-${idx}`).value.toUpperCase().substring(0,3);
+                if(!dest) dest = document.getElementById(`seg-dest-input-${idx}`).value.toUpperCase().substring(0,3);
+                
+                const date = document.getElementById(`seg-date-${idx}`).value;
+
+                if(origin && dest && date) {
+                    originDestinations.push({
+                        id: (i + 1).toString(),
+                        originLocationCode: origin,
+                        destinationLocationCode: dest,
+                        departureDateTimeRange: { date: date }
+                    });
+                }
+            }
+
+            if(originDestinations.length === 0) throw new Error("Please enter at least one flight segment.");
+
+            const requestBody = {
+                currencyCode: "PKR",
+                originDestinations: originDestinations,
+                travelers: [{ id: "1", travelerType: "ADULT" }],
+                sources: ["GDS"]
+            };
+
+            const endpoint = useProxy ? PROXY_URL + encodeURIComponent(SEARCH_URL_POST) : SEARCH_URL_POST;
+            const data = await fetchAndParse(endpoint, { 
+                method: 'POST', 
+                headers: { 
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(requestBody)
+            });
+            return data.data;
+        }
+
+        // --- DISPLAY RESULTS ---
+        function displayResults(flights) {
+            const container = document.getElementById('resultsArea');
+            currentFlights = flights; 
+            
+            if (!flights || flights.length === 0) {
+                container.innerHTML = `
+                    <div class="bg-white p-12 rounded-xl shadow-md text-center border border-gray-100">
+                        <div class="bg-gray-100 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-4">
+                            <i class="fas fa-search text-3xl text-gray-400"></i>
+                        </div>
+                        <h3 class="text-xl font-bold text-gray-700 mb-2">No Flights Found</h3>
+                        <p class="text-gray-500">We couldn't find any flights for this route and date. Try changing the dates slightly.</p>
+                    </div>`;
+                return;
+            }
+
+            flights.forEach((flight, index) => {
+                const currency = flight.price.currency;
+                const originalPrice = parseFloat(flight.price.total);
+                // Calculate Discounted Price
+                const finalPrice = (originalPrice * (1 - ACTIVE_DISCOUNT_PERCENTAGE)).toFixed(0); 
+                
+                // Handle Scraper "Check Site" display logic
+                const isScraper = flight.source === "SCRAPER";
+                const displayPrice = originalPrice > 0 ? `PKR ${Math.round(finalPrice).toLocaleString()}` : "Check Site";
+                const displayOriginal = originalPrice > 0 ? `PKR ${Math.round(originalPrice).toLocaleString()}` : "";
+
+                let legsHtml = "";
+                const itineraries = flight.itineraries;
+                
+                itineraries.forEach((itinerary, iIdx) => {
+                    const segments = itinerary.segments;
+                    const firstSeg = segments[0];
+                    const lastSeg = segments[segments.length - 1];
+                    const airlineCode = firstSeg.carrierCode;
+                    const duration = itinerary.duration.replace("PT", "").toLowerCase();
+                    
+                    let legTitle = "";
+                    if(currentTripType === 'roundtrip') {
+                        legTitle = iIdx === 0 ? "Outbound" : "Return";
+                    } else if (currentTripType === 'multicity') {
+                        legTitle = `Flight ${iIdx + 1}`;
+                    } else {
+                        legTitle = "Direct";
+                    }
+
+                    const airlines = { 'BA': 'British Airways', 'AA': 'American', 'EK': 'Emirates', 'QR': 'Qatar', 'PK': 'PIA', 'PA': 'Airblue', '9P': 'Fly Jinnah', 'FZ': 'Flydubai', 'NL': 'Fly Jinnah', 'SV': 'Saudia', 'EY': 'Etihad', 'TK': 'Turkish' };
+                    const airlineName = airlines[airlineCode] || airlineCode;
+
+                    legsHtml += `
+                        <div class="mb-4 last:mb-0 border-b last:border-0 border-gray-100 pb-3 last:pb-0">
+                            <div class="flex justify-between items-center text-xs font-bold text-gray-400 uppercase tracking-wide mb-2">
+                                <span class="bg-gray-100 px-2 py-0.5 rounded">${legTitle}</span>
+                                <span class="flex items-center"><i class="fas fa-plane mr-1"></i> ${airlineName}</span>
+                            </div>
+                            <div class="flex items-center text-gray-700 justify-between">
+                                <div class="text-center w-20">
+                                    <p class="text-xl font-black text-gray-800">${firstSeg.departure.at.split('T')[1].substr(0,5)}</p>
+                                    <p class="text-xs font-bold text-gray-500">${firstSeg.departure.iataCode}</p>
+                                </div>
+                                <div class="flex-1 px-2 flex flex-col items-center">
+                                    <p class="text-[10px] text-gray-400 mb-1">${duration}</p>
+                                    <div class="w-full flex items-center">
+                                        <div class="h-[2px] bg-gray-200 flex-1"></div>
+                                        <i class="fas fa-plane text-gray-300 text-xs mx-2"></i>
+                                        <div class="h-[2px] bg-gray-200 flex-1"></div>
+                                    </div>
+                                    <p class="text-[10px] text-green-600 font-bold mt-1">${segments.length > 1 ? (segments.length-1) + " Stop(s)" : "Non-stop"}</p>
+                                </div>
+                                <div class="text-center w-20">
+                                    <p class="text-xl font-black text-gray-800">${lastSeg.arrival.at.split('T')[1].substr(0,5)}</p>
+                                    <p class="text-xs font-bold text-gray-500">${lastSeg.arrival.iataCode}</p>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+
+                const card = `
+                    <div class="bg-white rounded-xl shadow-md hover:shadow-lg p-0 flight-card transition-all duration-300 overflow-hidden border border-gray-100">
+                        <div class="flex flex-col md:flex-row">
+                            <div class="flex-1 p-6">
+                                ${legsHtml}
+                            </div>
+                            <div class="bg-gray-50 p-6 w-full md:w-48 flex flex-row md:flex-col justify-between items-center md:justify-center border-t md:border-t-0 md:border-l border-gray-100">
+                                <div class="text-right md:text-center mb-0 md:mb-4">
+                                    ${displayOriginal ? `<p class="text-xs text-red-400 line-through font-medium">${displayOriginal}</p>` : ''}
+                                    <p class="text-2xl font-black text-green-600 leading-none">
+                                        ${displayPrice.replace("PKR ", "")}
+                                    </p>
+                                    <p class="text-[10px] text-gray-500 font-bold mt-1">PKR</p>
+                                    ${displayOriginal ? `
+                                    <div class="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded shadow-sm font-bold inline-block mt-1">
+                                        -40% OFF
+                                    </div>` : ''}
+                                </div>
+                                <button onclick="selectFlight(${index}, ${finalPrice})" class="bg-green-600 hover:bg-green-700 text-white py-2.5 px-6 rounded-lg text-sm font-bold shadow-green-200 shadow-lg transition transform active:scale-95 flex items-center gap-2">
+                                    <i class="fab fa-whatsapp text-lg"></i> Book
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                container.innerHTML += card;
+            });
+        }
+
+        // --- UPDATED WHATSAPP BOOKING LOGIC ---
+        function selectFlight(index, finalPrice) {
+            const flight = currentFlights[index];
+            const currency = flight.price.currency;
+            const originalPrice = Math.round(flight.price.total).toLocaleString();
+            const formattedFinal = Math.round(finalPrice).toLocaleString();
+            const phoneNumber = "923306265440"; 
+
+            let flightDetailsMsg = "";
+            flight.itineraries.forEach((it, idx) => {
+                const segs = it.segments;
+                const f = segs[0];
+                const l = segs[segs.length - 1];
+                const type = currentTripType === 'roundtrip' ? (idx === 0 ? "Outbound" : "Return") : `Flight ${idx + 1}`;
+                
+                flightDetailsMsg += `\n✈️ *${type}:* ${f.carrierCode} ${f.number}\n` +
+                                    `   From: ${f.departure.iataCode} (${f.departure.at.split('T')[1].substr(0,5)})\n` +
+                                    `   To:     ${l.arrival.iataCode} (${l.arrival.at.split('T')[1].substr(0,5)})\n` +
+                                    `   Date: ${f.departure.at.split('T')[0]}\n`;
+            });
+
+            const discountMsg = `\n🏷️ *Discount:* 40% OFF Applied\n❌ *Old Price:* ${originalPrice} ${currency}`;
+            
+            const message = 
+                `*New Booking Request* 🎫\n` +
+                `------------------` +
+                `${flightDetailsMsg}` +
+                `------------------` +
+                `${discountMsg}\n` +
+                `✅ *Final Deal:* ${formattedFinal} ${currency}\n\n` +
+                `I would like to proceed with this booking.`;
+
+            const encodedMessage = encodeURIComponent(message);
+            
+            const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+            const baseUrl = isMobile ? 'https://api.whatsapp.com/send' : 'https://web.whatsapp.com/send';
+            
+            window.open(`${baseUrl}?phone=${phoneNumber}&text=${encodedMessage}`, '_blank');
+        }
+
+        // --- UPDATED LOADING WITH COUNTDOWN ---
+        function showLoading(isLoading) {
+            const btnLoader = document.getElementById('btnLoader');
+            const btnText = document.getElementById('btnText');
+            const searchButton = document.querySelector("button[type='submit']"); // Get button to disable it
+            
+            if (isLoading) {
+                // 1. Show Loader & Disable Button
+               btnLoader.classList.remove('hidden');
+               searchButton.disabled = true;
+               searchButton.classList.add('opacity-75', 'cursor-not-allowed');
+            
+               // 2. Start Countdown (Estimated 20 Seconds)
+                let timeLeft = 20;
+                btnText.textContent = `Searching... (${timeLeft}s)`;
+
+                // Clear any old timer just in case
+                if (searchTimer) clearInterval(searchTimer);
+
+                searchTimer = setInterval(() => {
+                    timeLeft--;
+                    if (timeLeft > 0) {
+                        btnText.textContent = `Searching... (${timeLeft}s)`;
+                        } else if (timeLeft === 0) {
+                            btnText.textContent = "Finalizing results...";
+                            } else {
+                                // If it takes longer than 20s, keep showing "Finalizing"
+                                clearInterval(searchTimer);
+                            }
+                        }, 1000);
+                    } else {
+                        // 3. Stop Loading & Reset Button
+                        btnLoader.classList.add('hidden');
+                        btnText.textContent = "Search Flights";
+                        searchButton.disabled = false;
+                        searchButton.classList.remove('opacity-75', 'cursor-not-allowed');
+
+                        // Stop the timer
+                        if (searchTimer) clearInterval(searchTimer);
+
+            }
+        }
+
+        function showError(msg) {
+            const container = document.getElementById('errorContainer');
+            const text = document.getElementById('errorText');
+            container.classList.remove('hidden');
+            
+            if (msg.includes("Failed to fetch") || msg.includes("NetworkError")) {
+                 text.innerHTML = `<strong>Network Connection Failed</strong><br>1. Ensure "Use Proxy" is checked.<br>2. Ensure "server.py" is running if searching Airblue.<br>3. Try again.`;
+            } else {
+                text.textContent = msg;
+            }
+        }
+
+        function clearUI() {
+            document.getElementById('resultsArea').innerHTML = '';
+            document.getElementById('errorContainer').classList.add('hidden');
+        }
+        let searchTimer = null; // <--- Add this line to store the timer ID
+    </script>
+</body>
+</html>
